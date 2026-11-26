@@ -1,12 +1,13 @@
 const $ = id => document.getElementById(id);
 const modes = {
  assistant: {heading:"AI Assistant",description:"Open Lichess analysis for permitted practice or review. Enter a practice FEN below to analyse with your paired desktop Stockfish.",url:"https://lichess.org/analysis",label:"Open analysis board"},
- auto: {heading:"Auto Play",description:"Start the dedicated BOT connection in the ChessAI desktop app. This preview does not start or stop the bot from the extension.",url:"https://lichess.org/",label:"Open Lichess"}
+ auto: {heading:"Auto Play",description:"Control your dedicated Lichess BOT account.",url:"https://lichess.org/",label:"Open Lichess"}
 };
 function select(mode) {
  if (!Object.hasOwn(modes,mode)) mode="assistant";
  const data=modes[mode];
  $("analysis").hidden=mode!=="assistant";
+ $("botpanel").hidden=mode!=="auto";
  if(mode!=="assistant") stopSync();
  for(const key of Object.keys(modes)) $(key).setAttribute("aria-pressed",String(key===mode));
  $("heading").textContent=data.heading;
@@ -106,3 +107,34 @@ async function follow(id){
  if(following&&id===generation)setTimeout(()=>follow(id),1200);
 }
 $("fen").addEventListener("input",stopSync);
+
+let botBusy=false;
+async function botRequest(action,body={}){
+ const port=parsePort(),key=$("key").value.trim();
+ if(!Number.isInteger(port)||port<1||port>65535||!key)throw new Error("Enter desktop port and pairing key");
+ const response=await fetch("http://127.0.0.1:"+port+"/extension/bot/"+action,{method:"POST",headers:{"Content-Type":"application/json","X-ChessAI-Key":key},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
+ const data=await response.json();
+ if(!response.ok)throw new Error(data.error||"Request failed");
+ return data;
+}
+async function botStatus(){
+ if(botBusy||$("botpanel").hidden)return;
+ try{
+ const data=await botRequest("status");
+ $("botstatus").textContent=data.status;
+ $("botopponent").textContent=data.opponent||"";
+ const valid=typeof data.gid==="string"&&/^[a-zA-Z0-9]+$/.test(data.gid);
+ $("botwatch").hidden=!valid;
+ if(valid)$("botwatch").href="https://lichess.org/"+data.gid;
+ }catch(e){$("botstatus").textContent=e.message;$("botwatch").hidden=true;}
+}
+async function botCommand(action,body){
+ if(botBusy)return;
+ botBusy=true;$("botstart").disabled=true;$("botstop").disabled=true;
+ try{await botRequest(action,body);$("botstatus").textContent="Command queued…";}
+ catch(e){$("botstatus").textContent=e.message;$("connection").open=true;}
+ finally{botBusy=false;$("botstart").disabled=false;$("botstop").disabled=false;}
+}
+$("botstart").addEventListener("click",()=>{const skill=Number($("botskill").value);if(!Number.isInteger(skill)||skill<0||skill>20){$("botstatus").textContent="Choose strength 0–20";return;}botCommand("start",{skill});});
+$("botstop").addEventListener("click",()=>{if(confirm("Stop BOT? An active game may time out."))botCommand("stop",{confirm:true});});
+setInterval(botStatus,2000);
