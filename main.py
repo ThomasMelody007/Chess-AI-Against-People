@@ -14,17 +14,37 @@ class Session:
         self.engine = chess.engine.SimpleEngine.popen_uci(path)
         self.engine.configure({"Skill Level": skill})
         self.seconds = seconds
+        self.mode = "black"
+        self.paused = False
+        self.history = []
+        self.evaluation = None
+
+    def engine_turn(self):
+        return self.mode == "both" or self.board.turn == (self.mode == "white")
+
+    def push(self, move):
+        self.history.append(self.board.san(move))
+        self.board.push(move)
+        self.evaluation = None
+
+    def tick(self):
+        if not self.paused and not self.board.is_game_over() and self.engine_turn():
+            result = self.engine.play(self.board, chess.engine.Limit(time=self.seconds))
+            self.push(result.move)
+            info = self.engine.analyse(self.board, chess.engine.Limit(time=0.1))
+            self.evaluation = info["score"].white().score(mate_score=10000)
+        return self.state()
 
     def state(self):
-        return {"fen": self.board.fen(), "legal": [m.uci() for m in self.board.legal_moves], "result": self.board.result() if self.board.is_game_over() else "", "turn": "White" if self.board.turn else "Black"}
+        return {"fen": self.board.fen(), "legal": [m.uci() for m in self.board.legal_moves] if not self.engine_turn() and not self.paused else [], "mode": self.mode, "paused": self.paused, "history": self.history, "evaluation": self.evaluation, "engine_turn": self.engine_turn(), "result": self.board.result() if self.board.is_game_over() else "", "turn": "White" if self.board.turn else "Black"}
 
     def move(self, uci):
-        if self.board.is_game_over() or not self.board.turn:
+        if self.board.is_game_over() or self.engine_turn() or self.paused:
             raise ValueError("Not your turn")
-        self.board.push_uci(uci)
-        if not self.board.is_game_over():
-            result = self.engine.play(self.board, chess.engine.Limit(time=self.seconds))
-            self.board.push(result.move)
+        move = chess.Move.from_uci(uci)
+        if move not in self.board.legal_moves:
+            raise ValueError("Illegal move")
+        self.push(move)
         return self.state()
 
 def handler_for(session):
@@ -54,8 +74,24 @@ def handler_for(session):
                     if not 0 < length <= 1024:
                         raise ValueError("Invalid request")
                     self.get_json(session.move(json.loads(self.rfile.read(length))["move"]))
+                elif self.path == "/tick":
+                    self.get_json(session.tick())
+                elif self.path == "/pause":
+                    session.paused = not session.paused
+                    self.get_json(session.state())
+                elif self.path == "/mode":
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if not 0 < length <= 1024:
+                        raise ValueError("Invalid request")
+                    mode = json.loads(self.rfile.read(length))["mode"]
+                    if mode not in ("white", "black", "both"):
+                        raise ValueError("Invalid mode")
+                    session.mode = mode
+                    self.get_json(session.state())
                 elif self.path == "/reset":
                     session.board.reset()
+                    session.history.clear()
+                    session.evaluation = None
                     self.get_json(session.state())
                 else:
                     self.get_json({"error":"Not found"}, 404)
@@ -67,15 +103,28 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Chess AI | Local browser lab")
-        self.geometry("540x350")
+        self.geometry("600x400")
+        self.configure(bg="#20252c")
+        style = ttk.Style(self)
+        style.theme_use("clam")
+        style.configure(".", background="#20252c", foreground="#eeeeee", fieldbackground="#343b45")
+        style.map("TButton", background=[("active", "#465365")])
         self.server = self.session = None
         self.path = tk.StringVar()
         self.skill = tk.IntVar(value=10)
         self.seconds = tk.DoubleVar(value=0.5)
         self.status = tk.StringVar(value="Stopped")
+        self.config_path = Path.home() / ".chessai-local-settings.json"
+        try:
+            saved = json.loads(self.config_path.read_text())
+            self.path.set(saved.get("path", ""))
+            self.skill.set(saved.get("skill", 10))
+            self.seconds.set(saved.get("seconds", 0.5))
+        except (OSError, ValueError, TypeError, tk.TclError):
+            pass
         frame = ttk.Frame(self, padding=24)
         frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text="Stockfish browser lab", font=("Segoe UI", 20, "bold")).pack(anchor="w")
+        ttk.Label(frame, text="Stockfish browser lab v0.2", font=("Segoe UI", 20, "bold")).pack(anchor="w")
         ttk.Label(frame, text="Local practice • authorised games only").pack(anchor="w", pady=(0,15))
         ttk.Entry(frame, textvariable=self.path).pack(fill="x")
         ttk.Button(frame, text="Choose Stockfish executable", command=self.choose).pack(anchor="w")
@@ -99,6 +148,10 @@ class App(tk.Tk):
             if not 0 <= skill <= 20 or not 0.1 <= seconds <= 5:
                 raise ValueError("Invalid engine settings")
             self.session = Session(self.path.get(), skill, seconds)
+            try:
+                self.config_path.write_text(json.dumps({"path": self.path.get(), "skill": skill, "seconds": seconds}))
+            except OSError:
+                pass
             self.server = HTTPServer(("127.0.0.1", 0), handler_for(self.session))
             threading.Thread(target=self.server.serve_forever, daemon=True).start()
             url = f"http://127.0.0.1:{self.server.server_port}"
