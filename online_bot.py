@@ -64,19 +64,18 @@ def game(token, engine, gid, username):
         print("Played:", board.san(result.move), flush=True)
     return "other"
 
-def main():
-    token = getpass.getpass("Lichess BOT token (hidden): ").strip()
+def run(token, path, skill=20):
     with request(token, "/api/account") as response:
         account = json.load(response)
     if account.get("title") != "BOT":
         print("A dedicated BOT account is required. No moves were submitted.")
         return
     username = account["id"].lower()
-    path = input("Stockfish executable path: ").strip().strip('"')
     print("Connected as", username, "| Casual standard rapid/classical challenges only.")
     print("Press Ctrl+C to stop. Stopping mid-game may cause a timeout.")
     stats = dict(win=0, loss=0, draw=0, other=0, skipped=0)
     with chess.engine.SimpleEngine.popen_uci(path) as engine:
+        engine.configure({"Skill Level": skill})
         while True:
             gid = None
             for event in stream(token, "/api/stream/event"):
@@ -93,6 +92,11 @@ def main():
                 outcome = game(token, engine, gid, username)
                 stats[outcome] += 1
                 print("Session statistics:", stats, flush=True)
+
+def main():
+    token = getpass.getpass("Lichess BOT token (hidden): ").strip()
+    path = input("Stockfish executable path: ").strip().strip('"')
+    run(token, path)
 
 if __name__ == "__main__":
     try:
