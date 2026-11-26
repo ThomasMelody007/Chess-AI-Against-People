@@ -19,3 +19,6 @@ Follow mode defaults on and clears results when the visible FEN disappears or ch
 
 ## v2.2.0
 Standalone local board using chess.js 1.4.0. Click source and destination, automatic analysis, FEN loading, PGN history, undo, flip, AI modes. Website polling removed. Browser testing pending. Build with npm.cmd install and npm.cmd run build. Drag/drop, arrows, evaluation bar and themes deferred.
+
+## v2.3.0
+Local practice UI: best move arrow, White-perspective evaluation, drag/drop, SAN recommendations, game-over banner, adjustable maximum thinking time and wider practice tab. Existing engine and chess.js dependencies unchanged. Browser testing pending; custom piece artwork and remaining medium-priority features deferred.
