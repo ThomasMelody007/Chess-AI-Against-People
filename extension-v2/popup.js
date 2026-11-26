@@ -1,62 +1,67 @@
+import { Chess } from './chess.mjs';
 const $=id=>document.getElementById(id);
-let worker,ready=false,busy=false,lines=new Map(),discard=false;
-function send(s){worker.postMessage(s);}
-function fail(s){ready=false;busy=false;$("status").textContent=s;$("analyse").disabled=true;$("stop").disabled=true;}
-function render(){ $("results").textContent=[...lines.entries()].sort((a,b)=>a[0]-b[0]).map(([i,l])=>i+". "+l).join("\n");}
-try{
- worker=new Worker(ENGINE_PATH);
- worker.onerror=()=>fail("Engine failed to load. Check the build output.");
- worker.onmessage=e=>{
- for(const line of String(e.data).split(/\r?\n/)){
- if(line==="uciok"){send("isready");}
- if(line==="readyok"){ready=true;$("status").textContent="Engine ready · local browser";$("analyse").disabled=false;}
- if(busy&&!discard&&line.startsWith("info ")){
- const pv=line.match(/\bpv ([a-h][1-8][a-h][1-8][qrbn]?)/),score=line.match(/\bscore (cp|mate) (-?\d+)/),depth=line.match(/\bdepth (\d+)/),rank=line.match(/\bmultipv (\d+)/);
- if(pv&&score&&depth){lines.set(Number(rank?.[1]||1),pv[1]+" · "+(score[1]==="mate"?"Mate "+score[2]:(Number(score[2])/100).toFixed(2))+" · depth "+depth[1]);render();}
+let game=new Chess(),selected=null,flipped=false,worker,ready=false,search=null,pending=false,lines=new Map();
+const glyph={k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
+const aiTurn=()=>['both',game.turn()==='w'?'white':'black'].includes($('mode').value);
+function draw(){
+ $('board').replaceChildren();
+ const files=[...'abcdefgh'],ranks=[8,7,6,5,4,3,2,1];
+ if(flipped){files.reverse();ranks.reverse();}
+ const legal=selected?game.moves({square:selected,verbose:true}).map(m=>m.to):[];
+ for(const rank of ranks)for(const file of files){
+ const sq=file+rank,p=game.get(sq),b=document.createElement('button');
+ b.className=((file.charCodeAt(0)-97+rank)%2?'light':'dark')+(sq===selected?' selected':legal.includes(sq)?' legal':'')+(p?.color==='w'?' whitepiece':'');
+ b.textContent=p?glyph[p.type]:'';
+ b.setAttribute('aria-label',sq+(p?' '+p.color+' '+p.type:''));
+ const label=document.createElement('small');label.textContent=sq;b.append(label);b.onclick=()=>choose(sq);$('board').append(b);
  }
- if(line.startsWith("bestmove ")){busy=false;if(!discard)$("status").textContent="Best move: "+line.split(" ")[1];$("analyse").disabled=!ready;$("stop").disabled=true;}
- }
- };
- send("uci");
-}catch(e){fail(e.message);}
-$("analyse").onclick=()=>{
- if(!ready||busy||($("follow").checked&&!available))return;
- const fen=$("fen").value.trim(),depth=Number($("depth").value),skill=Number($("skill").value);
- const parts=fen.split(" ");
- if(parts.length!==6||!/^(?:[prnbqkPRNBQK1-8]+\/){7}[prnbqkPRNBQK1-8]+$/.test(parts[0])||parts[0].split("/").some(r=>[...r].reduce((n,c)=>n+(/[1-8]/.test(c)?Number(c):1),0)!==8)||!/^[wb]$/.test(parts[1])||! /^(?:-|K?Q?k?q?)$/.test(parts[2])||! /^(?:-|[a-h][36])$/.test(parts[3])||! /^\d+$/.test(parts[4])||! /^[1-9]\d*$/.test(parts[5])||/[\r\n]/.test(fen)||!Number.isInteger(depth)||depth<1||depth>22||!Number.isInteger(skill)||skill<0||skill>20){$("status").textContent="Check FEN and engine settings";return;}
- discard=false;lines.clear();render();busy=true;$("analyse").disabled=true;$("stop").disabled=false;$("status").textContent="Analysing…";
- send("setoption name Skill Level value "+skill);send("setoption name MultiPV value 3");send("position fen "+fen);send("go depth "+depth+" movetime 10000");
-};
-$("stop").onclick=()=>{if(busy)send("stop");};
-
-let followed="",pending="",polling=false,available=false;
-function invalidate(){available=false;followed="";pending="";if($("follow").checked){discard=true;lines.clear();render();$("status").textContent="Waiting for verified analysis position";if(busy)send("stop");}}
-
-const allowed=url=>{try{const u=new URL(url);return u.origin==="https://www.chess.com"&&/^\/analysis\/?$/.test(u.pathname);}catch{return false;}};
-async function poll(){
- if(polling)return;polling=true;
- try{
- const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
- if(!tab||!allowed(tab.url)){ $("site").textContent="Open chess.com/analysis for automatic import";invalidate();return;}
- const [r]=await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>{
- if(location.origin!=="https://www.chess.com"||!/^\/analysis\/?$/.test(location.pathname))return null;
- const pattern=/^(?:[prnbqkPRNBQK1-8]+\/){7}[prnbqkPRNBQK1-8]+ [wb] (?:-|K?Q?k?q?) (?:-|[a-h][36]) \d+ \d+$/;
- const values=[...document.querySelectorAll("input,textarea")].filter(e=>e.getClientRects().length).map(e=>e.value.trim()).filter(v=>pattern.test(v));
- return [...new Set(values)].length===1?values[0]:null;
- }});
- if(!r?.result){$("site").textContent="Analysis page detected · open Share Game to import FEN";invalidate();return;}
- $("site").textContent="Chess.com analysis · FEN detected";available=true;
- if($("follow").checked&&r.result!==followed){pending=r.result;if(busy&&!discard){discard=true;lines.clear();render();send("stop");}if(!busy&&ready){$("fen").value=pending;followed=pending;pending="";$("analyse").click();}}
- }catch(e){$("site").textContent="Analysis access unavailable · reopen popup on analysis page";invalidate();}finally{polling=false;}
+ $('fen').value=game.fen();$('history').textContent=game.pgn()||'No moves yet';
+ $('turn').textContent=game.isCheckmate()?(game.turn()==='w'?'Black':'White')+' wins by checkmate':game.isDraw()?'Draw':(game.turn()==='w'?'White':'Black')+' to move'+(game.isCheck()?' · Check':'');
 }
-$("follow").onchange=()=>{followed="";pending="";discard=true;lines.clear();render();if(busy)send("stop");$("status").textContent=$("follow").checked?"Waiting for verified analysis position":"Manual FEN mode";if($("follow").checked)poll();};
-$("fen").addEventListener("input",()=>{$("follow").checked=false;pending="";discard=true;lines.clear();render();if(busy)send("stop");$("status").textContent="Manual FEN changed";});
-$("stop").addEventListener("click",()=>{$("follow").checked=false;pending="";});
-chrome.storage.local.get(["depth","skill"]).then(v=>{for(const k of ["depth","skill"])if(Number.isInteger(v[k])&&v[k]>=Number($(k).min)&&v[k]<=Number($(k).max))$(k).value=v[k];});
-for(const k of ["depth","skill"])$(k).addEventListener("change",()=>{const n=Number($(k).value);if(Number.isInteger(n)&&n>=Number($(k).min)&&n<=Number($(k).max))chrome.storage.local.set({[k]:n});});
-poll();setInterval(poll,1200);
-
-$("panel").onclick=()=>{
- if(!chrome.sidePanel?.open){$("site").textContent="Side panel unavailable in this browser version";return;}
- chrome.sidePanel.open({windowId:chrome.windows.WINDOW_ID_CURRENT}).catch(()=>{$("site").textContent="Could not open side panel. Use the browser side panel menu.";});
-};
+function choose(sq){
+ if(game.isGameOver()||aiTurn())return;
+ const p=game.get(sq);
+ if(selected&&game.moves({square:selected,verbose:true}).some(m=>m.to===sq)){
+ const options=game.moves({square:selected,verbose:true}).filter(m=>m.to===sq);
+ let promotion='q';if(options.some(m=>m.promotion)){const v=prompt('Promote to q, r, b or n','q');if(!v||!['q','r','b','n'].includes(v))return;promotion=v;}
+ game.move({from:selected,to:sq,promotion});changed();return;
+ }
+ selected=p?.color===game.turn()?sq:null;draw();
+}
+function changed(){selected=null;draw();request($('auto').checked||aiTurn());}
+function request(run=true){lines.clear();$('results').textContent='';pending=run;if(search){search.cancelled=true;worker.postMessage('stop');}else start();}
+function start(){
+ if(!ready||search||!pending||game.isGameOver())return;
+ pending=false;const depth=Number($('depth').value),skill=Number($('skill').value);
+ if(!Number.isInteger(depth)||depth<1||depth>22||!Number.isInteger(skill)||skill<0||skill>20){$('status').textContent='Invalid engine settings';return;}
+ search={fen:game.fen(),cancelled:false,play:aiTurn()};$('status').textContent='Analysing…';
+ worker.postMessage('setoption name Skill Level value '+skill);
+ worker.postMessage('setoption name MultiPV value '+(search.play?1:3));
+ worker.postMessage('position fen '+search.fen);
+ worker.postMessage('go depth '+depth+' movetime 3000');
+}
+try{
+ worker=new Worker(ENGINE_PATH);worker.onerror=()=>{$('status').textContent='Engine failed';ready=false;search=null;$('analyse').disabled=true;};
+ worker.onmessage=e=>{for(const line of String(e.data).split(/\r?\n/)){
+ if(line==='uciok')worker.postMessage('isready');
+ if(line==='readyok'){ready=true;$('analyse').disabled=false;$('status').textContent='Engine ready';start();}
+ if(search&&!search.cancelled&&search.fen===game.fen()&&line.startsWith('info ')){
+ const pv=line.match(/\bpv ([a-h][1-8][a-h][1-8][qrbn]?)/),score=line.match(/\bscore (cp|mate) (-?\d+)/),rank=line.match(/\bmultipv (\d+)/);
+ if(pv&&score){lines.set(Number(rank?.[1]||1),pv[1]+' · '+(score[1]==='mate'?'Mate '+score[2]:(Number(score[2])/100).toFixed(2)));$('results').textContent=[...lines].sort((a,b)=>a[0]-b[0]).map(([i,v])=>i+'. '+v).join('\n');}
+ }
+ if(line.startsWith('bestmove ')&&search){const old=search;search=null;const m=line.split(' ')[1];
+ if(!old.cancelled&&old.fen===game.fen()){$('status').textContent='Best move: '+m;
+ if(old.play&&aiTurn()&&/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m)){try{game.move({from:m.slice(0,2),to:m.slice(2,4),promotion:m[4]||'q'});changed();}catch{$('mode').value='human';$('status').textContent='Engine move rejected';}}}
+ start();}
+ }};
+ worker.postMessage('uci');
+}catch(e){$('status').textContent=e.message;}
+$('undo').onclick=()=>{$('mode').value='human';game.undo();changed();};
+$('reset').onclick=()=>{$('mode').value='human';game.reset();changed();};
+$('flip').onclick=()=>{flipped=!flipped;draw();};
+$('load').onclick=()=>{try{const next=new Chess($('fen').value.trim());game=next;$('mode').value='human';changed();}catch(e){$('status').textContent='Invalid FEN: '+e.message;}};
+$('analyse').onclick=()=>request(true);
+$('stop').onclick=()=>{$('mode').value='human';$('auto').checked=false;request(false);$('status').textContent='Paused';};
+$('mode').onchange=()=>changed();$('auto').onchange=()=>request($('auto').checked||aiTurn());
+$('panel').onclick=()=>chrome.tabs.create({url:chrome.runtime.getURL('popup.html')});
+draw();pending=true;start();
