@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import chess
 import chess.engine
+import chess.pgn
 import threading
 import subprocess
 import sys
@@ -106,8 +107,8 @@ def handler_for(session):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Chess AI | Control Centre v0.4.0")
-        self.geometry("760x620")
+        self.title("Chess AI | Control Centre v0.5.0")
+        self.geometry("900x800")
         self.configure(bg="#20252c")
         style = ttk.Style(self)
         style.theme_use("clam")
@@ -159,12 +160,81 @@ class App(tk.Tk):
         ttk.Button(controls, text="Connect", command=self.connect_online).pack(side="left")
         ttk.Button(controls, text="Disconnect", command=self.disconnect_online).pack(side="left")
         ttk.Label(online, textvariable=self.online_status).pack(anchor="w", pady=8)
-        self.log = tk.Text(online, height=16, bg="#15191e", fg="#eeeeee", wrap="word", state="disabled")
+        self.gid = None
+        self.opponent = tk.StringVar(value="Awaiting challenge")
+        self.clocks = tk.StringVar(value="White —   Black —")
+        self.totals = tk.StringVar()
+        ttk.Label(online, textvariable=self.totals, font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        ttk.Label(online, textvariable=self.opponent).pack(anchor="w")
+        ttk.Label(online, textvariable=self.clocks).pack(anchor="w")
+        panel = ttk.Frame(online)
+        panel.pack(fill="x")
+        self.canvas = tk.Canvas(panel, width=320, height=320, highlightthickness=0)
+        self.canvas.pack(side="left")
+        actions = ttk.Frame(panel, padding=12)
+        actions.pack(side="left", anchor="n")
+        ttk.Button(actions, text="Watch on Lichess", command=self.watch_game).pack(fill="x")
+        ttk.Button(actions, text="Export saved PGNs", command=self.export_games).pack(fill="x")
+        self.draw_position(chess.STARTING_FEN)
+        self.refresh_totals()
+        self.log = tk.Text(online, height=6, bg="#15191e", fg="#eeeeee", wrap="word", state="disabled")
         self.log.pack(fill="both", expand=True)
         if not self.path.get():
             self.path.set(shutil.which("stockfish") or "")
         self.after(150, self.poll_online)
         self.protocol("WM_DELETE_WINDOW", self.close)
+    def draw_position(self, fen):
+        board = chess.Board(fen)
+        self.canvas.delete("all")
+        for row in range(8):
+            for col in range(8):
+                x, y = col * 40, row * 40
+                self.canvas.create_rectangle(x, y, x+40, y+40, fill="#769656" if (row+col)%2 else "#eeeed2", outline="")
+                piece = board.piece_at(chess.square(col, 7-row))
+                if piece:
+                    self.canvas.create_text(x+20, y+20, text=piece.unicode_symbol(), font=("Segoe UI Symbol", 28), fill="#161616")
+    def watch_game(self):
+        if self.gid:
+            webbrowser.open("https://lichess.org/" + self.gid)
+    def saved_games(self):
+        return sorted((Path.home() / ".chessai" / "games").glob("*.pgn"))
+    def refresh_totals(self):
+        counts = dict(win=0, loss=0, draw=0)
+        for path in self.saved_games():
+            try:
+                with path.open(encoding="utf-8") as handle:
+                    headers = chess.pgn.read_headers(handle)
+                outcome = headers.get("BotOutcome") if headers else None
+                if outcome in counts:
+                    counts[outcome] += 1
+            except (OSError, ValueError):
+                continue
+        total = sum(counts.values())
+        rate = 100 * counts["win"] / total if total else 0
+        self.totals.set(f'Wins {counts["win"]}   Losses {counts["loss"]}   Draws {counts["draw"]}   Win rate {rate:.1f}%')
+    def export_games(self):
+        target = filedialog.asksaveasfilename(defaultextension=".pgn", filetypes=[("PGN", "*.pgn")])
+        if target:
+            try:
+                data = "\n\n".join(p.read_text(encoding="utf-8") for p in self.saved_games())
+                Path(target).write_text(data, encoding="utf-8")
+            except OSError as exc:
+                messagebox.showerror("Export failed", str(exc))
+    def handle_event(self, event):
+        kind = event.get("kind")
+        if kind == "opponent":
+            self.gid = event["gid"]
+            self.opponent.set(f'Opponent: {event["name"]} ({event["rating"]})')
+        elif kind == "position":
+            self.draw_position(event["fen"])
+            def clock(ms):
+                if ms is None:
+                    return "—"
+                m, s = divmod(max(0, ms // 1000), 60)
+                return f"{m}:{s:02d}"
+            self.clocks.set(f'White {clock(event["white"])}   Black {clock(event["black"])}   {event["status"]}')
+        elif kind == "archived":
+            self.refresh_totals()
     def connect_online(self):
         if self.worker is not None:
             return
@@ -197,6 +267,12 @@ class App(tk.Tk):
             if line is None:
                 self.worker = None
                 self.online_status.set("Disconnected")
+                continue
+            if line.startswith("@EVENT "):
+                try:
+                    self.handle_event(json.loads(line[7:]))
+                except (ValueError, KeyError, TypeError):
+                    pass
                 continue
             if line.startswith("Connected as"):
                 self.online_status.set("Connected")
