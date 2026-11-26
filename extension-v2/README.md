@@ -22,3 +22,6 @@ Standalone local board using chess.js 1.4.0. Click source and destination, autom
 
 ## v2.3.0
 Local practice UI: best move arrow, White-perspective evaluation, drag/drop, SAN recommendations, game-over banner, adjustable maximum thinking time and wider practice tab. Existing engine and chess.js dependencies unchanged. Browser testing pending; custom piece artwork and remaining medium-priority features deferred.
+
+## v2.4.0
+Review uses a separate full-strength engine at depth 12 / up to 1 second per position. Centipawn loss compares consecutive White-perspective scores from the mover's perspective; estimated accuracy averages 100*exp(-loss/200). Ratings are heuristic, not Chess.com ratings. History navigation is read-only until returning to latest. Material balance and difficulty presets added; Elo calibration and opening recognition deferred. Browser testing pending.
