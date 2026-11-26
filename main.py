@@ -6,6 +6,8 @@ import chess.pgn
 import threading
 import time
 import os
+import secrets
+import hmac
 import subprocess
 import sys
 import queue
@@ -54,7 +56,7 @@ class Session:
         self.push(move)
         return self.state()
 
-def handler_for(session):
+def handler_for(session, pairing):
     class Handler(BaseHTTPRequestHandler):
         def reply(self, status, data, kind="application/json"):
             self.send_response(status)
@@ -72,6 +74,26 @@ def handler_for(session):
             else:
                 self.get_json({"error":"Not found"}, 404)
         def do_POST(self):
+            if self.path == "/extension/analyse":
+                if self.headers.get("Host") != f"127.0.0.1:{self.server.server_port}" or not hmac.compare_digest(self.headers.get("X-ChessAI-Key", ""), pairing):
+                    self.get_json({"error":"Pairing key required"}, 403)
+                    return
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if not 0 < length <= 2048:
+                        raise ValueError("Invalid request")
+                    data = json.loads(self.rfile.read(length))
+                    board = chess.Board(data["fen"])
+                    if not board.is_valid() or board.is_game_over():
+                        raise ValueError("Use a valid unfinished practice position")
+                    seconds = float(data.get("seconds", 1))
+                    if not 0.1 <= seconds <= 5:
+                        raise ValueError("Thinking time must be 0.1–5 seconds")
+                    lines = session.engine.analyse(board, chess.engine.Limit(time=seconds), multipv=3)
+                    self.get_json({"lines":[{"move":board.san(i["pv"][0]),"score":i["score"].white().score(mate_score=10000),"mate":i["score"].white().mate(),"depth":i.get("depth")} for i in lines if i.get("pv")]})
+                except Exception as exc:
+                    self.get_json({"error":str(exc)}, 400)
+                return
             if self.headers.get("Origin") != "http://" + self.headers.get("Host", "") or self.headers.get("Host") != f"127.0.0.1:{self.server.server_port}":
                 self.get_json({"error":"Local origin required"}, 403)
                 return
@@ -109,7 +131,7 @@ def handler_for(session):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Chess AI | Control Centre v0.6.0")
+        self.title("Chess AI | Control Centre v0.7.0")
         self.geometry("900x800")
         self.configure(bg="#20252c")
         style = ttk.Style(self)
@@ -123,6 +145,8 @@ class App(tk.Tk):
         self.threads = tk.IntVar(value=1)
         self.memory = tk.IntVar(value=64)
         self.status = tk.StringVar(value="Stopped")
+        self.pairing = secrets.token_urlsafe(32)
+        self.pairing_display = tk.StringVar(value=self.pairing)
         self.config_path = Path.home() / ".chessai-local-settings.json"
         try:
             saved = json.loads(self.config_path.read_text())
@@ -156,6 +180,8 @@ class App(tk.Tk):
         ttk.Button(row, text="Start local board", command=self.start).pack(side="left")
         ttk.Button(row, text="Stop", command=self.stop).pack(side="left")
         ttk.Label(frame, textvariable=self.status).pack(anchor="w")
+        ttk.Label(frame, text="Extension pairing key (copy into popup)").pack(anchor="w")
+        ttk.Entry(frame, textvariable=self.pairing_display, state="readonly").pack(anchor="w", fill="x")
         self.worker = None
         self.messages = queue.Queue()
         self.token = tk.StringVar()
@@ -350,7 +376,7 @@ class App(tk.Tk):
                 self.config_path.write_text(json.dumps({"path": self.path.get(), "skill": skill, "seconds": seconds, "threads": threads, "memory": memory}))
             except OSError:
                 pass
-            self.server = HTTPServer(("127.0.0.1", 0), handler_for(self.session))
+            self.server = HTTPServer(("127.0.0.1", 58818), handler_for(self.session, self.pairing))
             threading.Thread(target=self.server.serve_forever, daemon=True).start()
             url = f"http://127.0.0.1:{self.server.server_port}"
             self.status.set(url)
