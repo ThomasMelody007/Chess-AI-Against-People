@@ -90,7 +90,7 @@ def handler_for(session, pairing):
                     if not 0.1 <= seconds <= 5:
                         raise ValueError("Thinking time must be 0.1–5 seconds")
                     lines = session.engine.analyse(board, chess.engine.Limit(time=seconds), multipv=3)
-                    self.get_json({"lines":[{"move":board.san(i["pv"][0]),"score":i["score"].white().score(mate_score=10000),"mate":i["score"].white().mate(),"depth":i.get("depth")} for i in lines if i.get("pv")]})
+                    self.get_json({"lines":[{"move":board.san(i["pv"][0]),"uci":i["pv"][0].uci(),"score":i["score"].white().score(mate_score=10000),"mate":i["score"].white().mate(),"depth":i.get("depth")} for i in lines if i.get("pv")]})
                 except Exception as exc:
                     self.get_json({"error":str(exc)}, 400)
                 return
@@ -131,7 +131,7 @@ def handler_for(session, pairing):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Chess AI | Control Centre v0.7.0")
+        self.title("Chess AI | Control Centre v0.8.0")
         self.geometry("900x800")
         self.configure(bg="#20252c")
         style = ttk.Style(self)
