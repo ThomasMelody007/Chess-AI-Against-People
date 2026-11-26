@@ -16,3 +16,6 @@ Adds browser side panel access and collapses advanced settings by default. Share
 
 ## v2.1.2
 Follow mode defaults on and clears results when the visible FEN disappears or changes. Untick to use manual FEN. This is a stale-result safeguard, not continuous board extraction: Share Game is still required. Browser runtime testing pending.
+
+## v2.2.0
+Standalone local board using chess.js 1.4.0. Click source and destination, automatic analysis, FEN loading, PGN history, undo, flip, AI modes. Website polling removed. Browser testing pending. Build with npm.cmd install and npm.cmd run build. Drag/drop, arrows, evaluation bar and themes deferred.
