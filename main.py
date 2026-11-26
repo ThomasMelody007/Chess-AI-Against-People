@@ -4,6 +4,8 @@ import chess
 import chess.engine
 import chess.pgn
 import threading
+import time
+import os
 import subprocess
 import sys
 import queue
@@ -14,10 +16,10 @@ import json
 from pathlib import Path
 
 class Session:
-    def __init__(self, path, skill, seconds):
+    def __init__(self, path, skill, seconds, threads=1, memory=64):
         self.board = chess.Board()
         self.engine = chess.engine.SimpleEngine.popen_uci(path)
-        self.engine.configure({"Skill Level": skill})
+        self.engine.configure({"Skill Level": skill, "Threads": threads, "Hash": memory})
         self.seconds = seconds
         self.mode = "black"
         self.paused = False
@@ -107,7 +109,7 @@ def handler_for(session):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Chess AI | Control Centre v0.5.0")
+        self.title("Chess AI | Control Centre v0.6.0")
         self.geometry("900x800")
         self.configure(bg="#20252c")
         style = ttk.Style(self)
@@ -118,6 +120,8 @@ class App(tk.Tk):
         self.path = tk.StringVar()
         self.skill = tk.IntVar(value=10)
         self.seconds = tk.DoubleVar(value=0.5)
+        self.threads = tk.IntVar(value=1)
+        self.memory = tk.IntVar(value=64)
         self.status = tk.StringVar(value="Stopped")
         self.config_path = Path.home() / ".chessai-local-settings.json"
         try:
@@ -125,6 +129,8 @@ class App(tk.Tk):
             self.path.set(saved.get("path", ""))
             self.skill.set(saved.get("skill", 10))
             self.seconds.set(saved.get("seconds", 0.5))
+            self.threads.set(saved.get("threads", 1))
+            self.memory.set(saved.get("memory", 64))
         except (OSError, ValueError, TypeError, tk.TclError):
             pass
         tabs = ttk.Notebook(self)
@@ -141,6 +147,10 @@ class App(tk.Tk):
         ttk.Spinbox(frame, from_=0, to=20, textvariable=self.skill).pack(anchor="w")
         ttk.Label(frame, text="Thinking time (seconds)").pack(anchor="w")
         ttk.Spinbox(frame, from_=0.1, to=5, increment=0.1, textvariable=self.seconds).pack(anchor="w")
+        ttk.Label(frame, text="Offline engine CPU threads").pack(anchor="w")
+        ttk.Spinbox(frame, from_=1, to=max(1, os.cpu_count() or 1), textvariable=self.threads).pack(anchor="w")
+        ttk.Label(frame, text="Offline engine hash memory (MB)").pack(anchor="w")
+        ttk.Spinbox(frame, from_=16, to=512, increment=16, textvariable=self.memory).pack(anchor="w")
         row = ttk.Frame(frame)
         row.pack(anchor="w", pady=12)
         ttk.Button(row, text="Start local board", command=self.start).pack(side="left")
@@ -161,6 +171,9 @@ class App(tk.Tk):
         ttk.Button(controls, text="Disconnect", command=self.disconnect_online).pack(side="left")
         ttk.Label(online, textvariable=self.online_status).pack(anchor="w", pady=8)
         self.gid = None
+        self.flipped = False
+        self.fen = chess.STARTING_FEN
+        self.clock_snapshot = None
         self.opponent = tk.StringVar(value="Awaiting challenge")
         self.clocks = tk.StringVar(value="White —   Black —")
         self.totals = tk.StringVar()
@@ -175,6 +188,8 @@ class App(tk.Tk):
         actions.pack(side="left", anchor="n")
         ttk.Button(actions, text="Watch on Lichess", command=self.watch_game).pack(fill="x")
         ttk.Button(actions, text="Export saved PGNs", command=self.export_games).pack(fill="x")
+        ttk.Button(actions, text="Flip board", command=self.flip_board).pack(fill="x")
+        ttk.Button(actions, text="Browse saved games", command=self.browse_games).pack(fill="x")
         self.draw_position(chess.STARTING_FEN)
         self.refresh_totals()
         self.log = tk.Text(online, height=6, bg="#15191e", fg="#eeeeee", wrap="word", state="disabled")
@@ -183,16 +198,42 @@ class App(tk.Tk):
             self.path.set(shutil.which("stockfish") or "")
         self.after(150, self.poll_online)
         self.protocol("WM_DELETE_WINDOW", self.close)
+    def flip_board(self):
+        self.flipped = not self.flipped
+        self.draw_position(self.fen)
     def draw_position(self, fen):
+        self.fen = fen
         board = chess.Board(fen)
         self.canvas.delete("all")
         for row in range(8):
             for col in range(8):
                 x, y = col * 40, row * 40
                 self.canvas.create_rectangle(x, y, x+40, y+40, fill="#769656" if (row+col)%2 else "#eeeed2", outline="")
-                piece = board.piece_at(chess.square(col, 7-row))
+                piece = board.piece_at(chess.square(7-col, row) if self.flipped else chess.square(col, 7-row))
                 if piece:
                     self.canvas.create_text(x+20, y+20, text=piece.unicode_symbol(), font=("Segoe UI Symbol", 28), fill="#161616")
+    def browse_games(self):
+        folder = Path.home() / ".chessai" / "games"
+        folder.mkdir(parents=True, exist_ok=True)
+        if sys.platform == "win32":
+            os.startfile(str(folder))
+        else:
+            webbrowser.open(folder.as_uri())
+    def update_clocks(self):
+        if not self.clock_snapshot:
+            return
+        event, received = self.clock_snapshot
+        elapsed = int((time.monotonic() - received) * 1000)
+        turn = chess.Board(event["fen"]).turn
+        def clock(key, active):
+            ms = event.get(key)
+            if ms is None:
+                return "—"
+            if active and event["status"] == "started":
+                ms -= elapsed
+            m, s = divmod(max(0, ms // 1000), 60)
+            return f"{m}:{s:02d}"
+        self.clocks.set(f'White {clock("white", turn)}   Black {clock("black", not turn)}   {event["status"]}')
     def watch_game(self):
         if self.gid:
             webbrowser.open("https://lichess.org/" + self.gid)
@@ -227,6 +268,7 @@ class App(tk.Tk):
             self.opponent.set(f'Opponent: {event["name"]} ({event["rating"]})')
         elif kind == "position":
             self.draw_position(event["fen"])
+            self.clock_snapshot = (event, time.monotonic())
             def clock(ms):
                 if ms is None:
                     return "—"
@@ -266,6 +308,7 @@ class App(tk.Tk):
                 continue
             if line is None:
                 self.worker = None
+                self.clock_snapshot = None
                 self.online_status.set("Disconnected")
                 continue
             if line.startswith("@EVENT "):
@@ -280,6 +323,7 @@ class App(tk.Tk):
             self.log.insert("end", line)
             self.log.see("end")
             self.log.configure(state="disabled")
+        self.update_clocks()
         self.after(150, self.poll_online)
     def disconnect_online(self, confirm=True):
         if self.worker:
@@ -287,6 +331,7 @@ class App(tk.Tk):
                 return
             self.worker.terminate()
             self.worker = None
+        self.clock_snapshot = None
         self.online_status.set("Disconnected")
     def choose(self):
         self.path.set(filedialog.askopenfilename(filetypes=[("Executable", "*.exe"), ("All files", "*")]))
@@ -297,9 +342,12 @@ class App(tk.Tk):
             skill, seconds = self.skill.get(), self.seconds.get()
             if not 0 <= skill <= 20 or not 0.1 <= seconds <= 5:
                 raise ValueError("Invalid engine settings")
-            self.session = Session(self.path.get(), skill, seconds)
+            threads, memory = self.threads.get(), self.memory.get()
+            if not 1 <= threads <= (os.cpu_count() or 1) or not 16 <= memory <= 512:
+                raise ValueError("Invalid CPU threads or hash memory")
+            self.session = Session(self.path.get(), skill, seconds, threads, memory)
             try:
-                self.config_path.write_text(json.dumps({"path": self.path.get(), "skill": skill, "seconds": seconds}))
+                self.config_path.write_text(json.dumps({"path": self.path.get(), "skill": skill, "seconds": seconds, "threads": threads, "memory": memory}))
             except OSError:
                 pass
             self.server = HTTPServer(("127.0.0.1", 0), handler_for(self.session))
