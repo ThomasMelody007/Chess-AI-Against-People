@@ -56,7 +56,7 @@ class Session:
         self.push(move)
         return self.state()
 
-def handler_for(session, pairing):
+def handler_for(session, pairing, commands, snapshot):
     class Handler(BaseHTTPRequestHandler):
         def reply(self, status, data, kind="application/json"):
             self.send_response(status)
@@ -74,6 +74,29 @@ def handler_for(session, pairing):
             else:
                 self.get_json({"error":"Not found"}, 404)
         def do_POST(self):
+            if self.path in ("/extension/bot/status", "/extension/bot/start", "/extension/bot/stop"):
+                if self.headers.get("Host") != f"127.0.0.1:{self.server.server_port}" or not hmac.compare_digest(self.headers.get("X-ChessAI-Key", ""), pairing):
+                    self.get_json({"error":"Pairing key required"}, 403)
+                    return
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if not 0 <= length <= 1024:
+                        raise ValueError("Invalid request")
+                    data = json.loads(self.rfile.read(length) or b"{}")
+                    action = self.path.rsplit("/", 1)[-1]
+                    if action == "start":
+                        skill = data.get("skill", 20)
+                        if type(skill) is not int or not 0 <= skill <= 20:
+                            raise ValueError("Invalid skill")
+                        commands.put_nowait(("start", skill))
+                    elif action == "stop":
+                        if data.get("confirm") is not True:
+                            raise ValueError("Confirm stopping the bot")
+                        commands.put_nowait(("stop", None))
+                    self.get_json(dict(snapshot(), queued=action != "status"))
+                except (ValueError, TypeError, queue.Full) as exc:
+                    self.get_json({"error":str(exc)}, 400)
+                return
             if self.path == "/extension/analyse":
                 if self.headers.get("Host") != f"127.0.0.1:{self.server.server_port}" or not hmac.compare_digest(self.headers.get("X-ChessAI-Key", ""), pairing):
                     self.get_json({"error":"Pairing key required"}, 403)
@@ -131,7 +154,7 @@ def handler_for(session, pairing):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Chess AI | Control Centre v0.8.0")
+        self.title("Chess AI | Control Centre v0.10.0")
         self.geometry("900x800")
         self.configure(bg="#20252c")
         style = ttk.Style(self)
@@ -183,6 +206,8 @@ class App(tk.Tk):
         ttk.Label(frame, text="Extension pairing key (copy into popup)").pack(anchor="w")
         ttk.Entry(frame, textvariable=self.pairing_display, state="readonly").pack(anchor="w", fill="x")
         self.worker = None
+        self.bot_commands = queue.Queue(maxsize=8)
+        self.bot_snapshot = {"status":"Disconnected","opponent":"","gid":None}
         self.messages = queue.Queue()
         self.token = tk.StringVar()
         self.online_status = tk.StringVar(value="Disconnected")
@@ -327,6 +352,21 @@ class App(tk.Tk):
     def poll_online(self):
         while True:
             try:
+                action, skill = self.bot_commands.get_nowait()
+            except queue.Empty:
+                break
+            if action == "start" and self.worker is None:
+                if not self.token.get().strip() or not self.path.get():
+                    self.online_status.set("Enter BOT token and Stockfish path in desktop app")
+                else:
+                    self.skill.set(skill)
+                    self.gid = None
+                    self.opponent.set("Awaiting challenge")
+                    self.connect_online()
+            elif action == "stop":
+                self.disconnect_online(confirm=False)
+        while True:
+            try:
                 p, line = self.messages.get_nowait()
             except queue.Empty:
                 break
@@ -350,6 +390,7 @@ class App(tk.Tk):
             self.log.see("end")
             self.log.configure(state="disabled")
         self.update_clocks()
+        self.bot_snapshot = {"status":self.online_status.get(),"opponent":self.opponent.get(),"gid":self.gid}
         self.after(150, self.poll_online)
     def disconnect_online(self, confirm=True):
         if self.worker:
@@ -376,7 +417,7 @@ class App(tk.Tk):
                 self.config_path.write_text(json.dumps({"path": self.path.get(), "skill": skill, "seconds": seconds, "threads": threads, "memory": memory}))
             except OSError:
                 pass
-            self.server = HTTPServer(("127.0.0.1", 58818), handler_for(self.session, self.pairing))
+            self.server = HTTPServer(("127.0.0.1", 58818), handler_for(self.session, self.pairing, self.bot_commands, lambda: self.bot_snapshot))
             threading.Thread(target=self.server.serve_forever, daemon=True).start()
             url = f"http://127.0.0.1:{self.server.server_port}"
             self.status.set(url)
