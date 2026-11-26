@@ -10,3 +10,6 @@ Standalone browser extension project. The existing desktop application and exten
 
 ## Status
 v2.0 engine confirmed by user in Edge. v2.1 adds explicit opt-in FEN following on the exact https://www.chess.com/analysis page while the popup is open. It reads a unique visible complete FEN input only; if unavailable, use manual FEN. No live game integration. Site compatibility remains untested. Build with npm.cmd install and npm.cmd run build, then load dist in Edge or Chrome.
+
+## v2.1.1
+Adds browser side panel access and collapses advanced settings by default. Share Game FEN import was confirmed in Edge in v2.1.0. The side panel and its active-tab permission behavior still require testing. Import still requires a visible FEN field; automatic extraction without Share Game is not implemented. Move output remains UCI notation.
