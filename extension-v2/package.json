@@ -1,11 +1,12 @@
 {
   "name": "chessai-v2",
-  "version": "2.1.2",
+  "version": "2.2.0",
   "private": true,
   "scripts": {
     "build": "node build.cjs"
   },
   "dependencies": {
-    "stockfish": "17.1.0"
+    "stockfish": "17.1.0",
+    "chess.js": "1.4.0"
   }
 }
