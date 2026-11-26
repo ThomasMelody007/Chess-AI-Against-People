@@ -7,6 +7,7 @@ function select(mode) {
  if (!Object.hasOwn(modes,mode)) mode="assistant";
  const data=modes[mode];
  $("analysis").hidden=mode!=="assistant";
+ if(mode!=="assistant") stopSync();
  for(const key of Object.keys(modes)) $(key).setAttribute("aria-pressed",String(key===mode));
  $("heading").textContent=data.heading;
  $("description").textContent=data.description;
@@ -33,7 +34,9 @@ function parsePort(){
  try{const u=new URL(raw);if(u.protocol==="http:"&&u.hostname==="127.0.0.1"&&u.port)return Number(u.port);}catch{}
  return NaN;
 }
-$("analyse").addEventListener("click",async()=>{
+$("analyse").addEventListener("click",analyse);
+async function analyse(){
+ if($("analyse").disabled)return;
  const port=parsePort(), key=$("key").value.trim(), seconds=Number($("seconds").value);
  if(!Number.isInteger(port)||port<1||port>65535||!key||!(seconds>=0.1&&seconds<=5)){ $("results").textContent="Check port, pairing key and thinking time.";return;}
  const fen=$("fen").value.trim();
@@ -45,12 +48,13 @@ $("analyse").addEventListener("click",async()=>{
  const response=await fetch("http://127.0.0.1:"+port+"/extension/analyse",{method:"POST",headers:{"Content-Type":"application/json","X-ChessAI-Key":key},body:JSON.stringify({fen,seconds}),signal:AbortSignal.timeout(15000)});
  const data=await response.json();
  if(!response.ok)throw new Error(data.error||"Request failed");
+ if(fen!==$("fen").value.trim())return;
  $("results").textContent=data.lines.map((line,i)=> (i+1)+". "+line.move+"  "+(line.mate!==null?"Mate "+line.mate:(line.score/100).toFixed(2))+"  Depth "+line.depth).join("\n");
  if(fen===$("fen").value.trim()&&data.lines.length){const best=data.lines[0];draw(best.uci);$("whitebar").style.width=(100/(1+Math.exp(-best.score/200)))+"%";$("eval").setAttribute("aria-label","White evaluation "+best.score/100);}
  $("status").textContent="Stockfish connected";
  }catch(e){$("results").textContent="Analysis failed: "+e.message;$("status").textContent="Check desktop connection";$("connection").open=true;}
  finally{$("analyse").disabled=false;}
-});
+}
 
 function draw(uci){
  const canvas=$("preview"),ctx=canvas.getContext("2d"),size=35;
@@ -66,3 +70,39 @@ function draw(uci){
  ctx.strokeStyle="#e59b27";ctx.fillStyle="#e59b27";ctx.lineWidth=5;ctx.lineCap="round";ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(a,b);ctx.stroke();ctx.beginPath();ctx.moveTo(a,b);ctx.lineTo(a-12*Math.cos(angle-.5),b-12*Math.sin(angle-.5));ctx.lineTo(a-12*Math.cos(angle+.5),b-12*Math.sin(angle+.5));ctx.closePath();ctx.fill();
 }
 draw();
+
+let following=false, generation=0, lastFen=null;
+function stopSync(){
+ following=false;generation++;
+ $("sync").setAttribute("aria-pressed","false");
+ $("sync").textContent="Follow local practice board";
+ $("syncstatus").textContent="";
+}
+$("sync").addEventListener("click",()=>{
+ if(following){stopSync();return;}
+ if(!$("key").value.trim()){$("connection").open=true;$("syncstatus").textContent="Enter desktop pairing key first.";return;}
+ following=true;lastFen=null;generation++;
+ $("sync").setAttribute("aria-pressed","true");
+ $("sync").textContent="Stop following";
+ follow(generation);
+});
+async function follow(id){
+ if(!following||id!==generation)return;
+ try{
+ const port=parsePort();
+ if(!Number.isInteger(port)||port<1||port>65535)throw new Error("Invalid local port");
+ const response=await fetch("http://127.0.0.1:"+port+"/state",{cache:"no-store",signal:AbortSignal.timeout(5000)});
+ if(!response.ok)throw new Error("Local board unavailable");
+ const state=await response.json();
+ if(!following||id!==generation)return;
+ if(typeof state.fen!=="string")throw new Error("Invalid local board state");
+ $("syncstatus").textContent="Following local practice board";
+ if(state.fen!==lastFen&&!$("analyse").disabled){
+ lastFen=state.fen;$("fen").value=state.fen;draw();$("whitebar").style.width="50%";
+ if(state.result){$("results").textContent="Game over: "+state.result;}
+ else await analyse();
+ }
+ }catch(e){if(id===generation){$("syncstatus").textContent=e.message;lastFen=null;}}
+ if(following&&id===generation)setTimeout(()=>follow(id),1200);
+}
+$("fen").addEventListener("input",stopSync);
