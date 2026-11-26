@@ -1,0 +1,11 @@
+{
+  "name": "chessai-v2",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node build.cjs"
+  },
+  "dependencies": {
+    "stockfish": "17.1.0"
+  }
+}
