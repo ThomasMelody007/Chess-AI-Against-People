@@ -15,4 +15,9 @@ Select which colour the engine plays in the browser, or Both sides for AI vs AI.
 Run OnlineBot.bat. Use a dedicated Lichess BOT account, with a personal token containing bot:play and challenge:write scopes. See https://lichess.org/api and https://lichess.org/account/oauth/token. A fresh account can be upgraded using the official bot account upgrade endpoint; upgrading is permanent. Enter the token locally (hidden input) and the Stockfish exe path. Never commit tokens. The prototype accepts casual standard rapid/classical challenges, plays automatically and prints results and session statistics. Ctrl+C stops the process; an active game may time out. No automatic reconnection or concurrent games are supported. The local launcher is unchanged. Live API testing is pending.
 
 ## Development workflow
-Updates are committed directly to main. Existing releases remain historical snapshots; new releases are not required. The unified desktop launcher includes an Online BOT tab (development preview).
+Updates are committed directly to main. Versioned releases are published after testing. The unified desktop launcher includes an Online BOT tab (development preview).
+
+## v0.6.0 — browser extension foundation
+Download and extract the repository ZIP. In Edge open edge://extensions or in Chrome open chrome://extensions. Enable Developer mode, select Load unpacked, and choose the extension folder. Pin ChessAI from the extensions menu.
+
+The popup offers AI Assistant and Auto Play navigation. To open the local board, start it in ChessAI.bat and enter the port from the displayed loopback URL. For authorised online games, connect a dedicated Lichess BOT account in the desktop application. The extension does not yet control Stockfish or the BOT process directly. It does not read or automate live human games. Browser runtime testing is pending.
