@@ -9,4 +9,4 @@ Standalone browser extension project. The existing desktop application and exten
 - No engine assistance in ordinary live multiplayer games.
 
 ## Status
-Project scaffold only. Engine assets, licensing notices, site integration and runtime testing are pending.
+v2.0 engine confirmed by user in Edge. v2.1 adds explicit opt-in FEN following on the exact https://www.chess.com/analysis page while the popup is open. It reads a unique visible complete FEN input only; if unavailable, use manual FEN. No live game integration. Site compatibility remains untested. Build with npm.cmd install and npm.cmd run build, then load dist in Edge or Chrome.
