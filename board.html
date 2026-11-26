@@ -1,0 +1,12 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Local chess lab</title><style>
+body{background:#15191e;color:#eee;font:16px system-ui;max-width:620px;margin:30px auto;padding:12px}#board{display:grid;grid-template-columns:repeat(8,1fr);width:100%;aspect-ratio:1}#board button{border:0;font-size:clamp(22px,7vw,52px);padding:0;cursor:pointer;color:#111}.light{background:#e8d7b6}.dark{background:#76906a}.selected{outline:4px solid gold;outline-offset:-4px}.target{box-shadow:inset 0 0 0 4px #efba42}button{font:inherit}#status{min-height:24px}
+</style><h1>Stockfish practice board</h1><p>Play White against your local engine.</p><div id="status"></div><div id="board"></div><p><button id="reset">New game</button></p><script>
+const board=document.querySelector('#board'),status=document.querySelector('#status');
+const glyph={K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙',k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
+let state, selected='', busy=false;
+function draw(){board.replaceChildren();let rows=state.fen.split(' ')[0].split('/');rows.forEach((row,r)=>{let c=0;for(const p of row){if(/[1-8]/.test(p)){for(let i=0;i<Number(p);i++)cell(r,c++,'');}else cell(r,c++,p);}});status.textContent=state.result?'Game over: '+({'1-0':'White wins','0-1':'Black wins','1/2-1/2':'Draw'}[state.result]||state.result):state.turn+' to move';}
+function cell(r,c,p){let sq='abcdefgh'[c]+(8-r),b=document.createElement('button');b.className=(r+c)%2?'dark':'light';b.textContent=glyph[p]||'';b.setAttribute('aria-label',sq+' '+p);if(selected===sq)b.classList.add('selected');if(selected&&state.legal.some(m=>m.startsWith(selected+sq)))b.classList.add('target');b.onclick=()=>click(sq);board.append(b);}
+async function request(path,data){busy=true;status.textContent='Working…';try{let res=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});let next=await res.json();if(!res.ok)throw Error(next.error);state=next;selected='';draw();}catch(e){status.textContent=e.message;}finally{busy=false;}}
+function click(sq){if(busy||state.result)return;let moves=state.legal.filter(m=>m.startsWith(selected+sq));if(moves.length){let m=moves[0];if(moves.length>1){let p=prompt('Promote to q, r, b or n','q');m=moves.find(x=>x[4]===p);if(!m)return;}request('/move',{move:m});}else{selected=state.legal.some(m=>m.startsWith(sq))?sq:'';draw();}}
+document.querySelector('#reset').onclick=()=>{if(!busy)request('/reset',{});};fetch('/state').then(r=>r.json()).then(s=>{state=s;draw();}).catch(e=>status.textContent=e.message);
+</script></html>
