@@ -5,6 +5,10 @@ import urllib.request
 import urllib.error
 import chess
 import chess.engine
+import chess.pgn
+from pathlib import Path
+from datetime import datetime, timezone
+import re
 
 BASE = "https://lichess.org"
 
@@ -23,6 +27,28 @@ def post(token, path):
     with request(token, path, True) as response:
         return json.load(response)
 
+def emit(kind, **data):
+    print("@EVENT " + json.dumps(dict(kind=kind, **data)), flush=True)
+
+def archive(gid, board, players, state, color):
+    if not re.fullmatch(r"[A-Za-z0-9]+", gid):
+        return
+    folder = Path.home() / ".chessai" / "games"
+    folder.mkdir(parents=True, exist_ok=True)
+    game = chess.pgn.Game.from_board(board)
+    game.headers["White"] = players[0]
+    game.headers["Black"] = players[1]
+    game.headers["Site"] = BASE + "/" + gid
+    game.headers["Date"] = datetime.now(timezone.utc).strftime("%Y.%m.%d")
+    winner = state.get("winner")
+    game.headers["Result"] = {"white":"1-0","black":"0-1"}.get(winner, "1/2-1/2" if state["status"] in ("draw","stalemate") else "*")
+    game.headers["BotOutcome"] = ("win" if (winner == "white") == color else "loss") if winner else ("draw" if game.headers["Result"] == "1/2-1/2" else "other")
+    target = folder / (gid + ".pgn")
+    temp = target.with_suffix(".tmp")
+    temp.write_text(str(game) + "\n\n", encoding="utf-8")
+    temp.replace(target)
+    emit("archived")
+
 def game(token, engine, gid, username):
     color = None
     last = None
@@ -36,23 +62,30 @@ def game(token, engine, gid, username):
             initial = event.get("initialFen", "startpos")
             state = event["state"]
             opponent = event["black" if color else "white"]
+            players = [event[k].get("name", "?") for k in ("white", "black")]
+            emit("opponent", name=opponent.get("name", "?"), rating=opponent.get("rating", "?"), gid=gid)
             print("Opponent:", opponent.get("name", "?"), opponent.get("rating", "?"))
             print("Watch: https://lichess.org/" + gid, flush=True)
         elif event["type"] == "gameState" and color is not None:
             state = event
         else:
             continue
+        moves = state.get("moves", "")
+        board = chess.Board() if initial == "startpos" else chess.Board(initial)
+        for move in moves.split():
+            board.push_uci(move)
+        emit("position", fen=board.fen(), white=state.get("wtime"), black=state.get("btime"), status=state["status"])
         if state["status"] != "started":
+            try:
+                archive(gid, board, players, state, color)
+            except OSError:
+                print("Could not save game history", flush=True)
             print("Result:", state["status"], state.get("winner", "no winner"))
             if state.get("winner"):
                 return "win" if (state["winner"] == "white") == color else "loss"
             return "draw" if state["status"] in ("draw", "stalemate") else "other"
-        moves = state.get("moves", "")
         if moves == last:
             continue
-        board = chess.Board() if initial == "startpos" else chess.Board(initial)
-        for move in moves.split():
-            board.push_uci(move)
         if board.turn != color or board.is_game_over():
             continue
         remaining = state.get("wtime" if color else "btime", 1000) / 1000
