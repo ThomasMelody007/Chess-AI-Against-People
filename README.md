@@ -13,3 +13,6 @@ Select which colour the engine plays in the browser, or Both sides for AI vs AI.
 
 ## Version 0.3 — online bot preview
 Run OnlineBot.bat. Use a dedicated Lichess BOT account, with a personal token containing bot:play and challenge:write scopes. See https://lichess.org/api and https://lichess.org/account/oauth/token. A fresh account can be upgraded using the official bot account upgrade endpoint; upgrading is permanent. Enter the token locally (hidden input) and the Stockfish exe path. Never commit tokens. The prototype accepts casual standard rapid/classical challenges, plays automatically and prints results and session statistics. Ctrl+C stops the process; an active game may time out. No automatic reconnection or concurrent games are supported. The local launcher is unchanged. Live API testing is pending.
+
+## Development workflow
+Updates are committed directly to main. Existing releases remain historical snapshots; new releases are not required. The unified desktop launcher includes an Online BOT tab (development preview).
