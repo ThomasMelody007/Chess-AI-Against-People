@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChessAI",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Local chess analysis and authorised Lichess BOT companion.",
   "action": {
     "default_popup": "popup.html"
@@ -11,5 +11,17 @@
   ],
   "host_permissions": [
     "http://127.0.0.1/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://lichess.org/analysis",
+        "https://lichess.org/analysis/"
+      ],
+      "js": [
+        "analysis-page.js"
+      ],
+      "run_at": "document_idle"
+    }
   ]
 }
