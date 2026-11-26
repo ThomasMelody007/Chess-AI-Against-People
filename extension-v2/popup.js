@@ -42,7 +42,7 @@ async function poll(){
  const values=[...document.querySelectorAll("input,textarea")].filter(e=>e.getClientRects().length).map(e=>e.value.trim()).filter(v=>pattern.test(v));
  return [...new Set(values)].length===1?values[0]:null;
  }});
- if(!r?.result){$("site").textContent="Analysis page detected · open its FEN field";$("follow").disabled=true;pending="";return;}
+ if(!r?.result){$("site").textContent="Analysis page detected · open Share Game to import FEN";$("follow").disabled=true;pending="";return;}
  $("site").textContent="Chess.com analysis · FEN detected";$("follow").disabled=false;
  if($("follow").checked&&r.result!==followed){pending=r.result;if(!busy&&ready){$("fen").value=pending;followed=pending;pending="";$("analyse").click();}}
  }catch(e){$("site").textContent="Analysis access unavailable · reopen popup on analysis page";$("follow").disabled=true;pending="";}finally{polling=false;}
@@ -53,3 +53,8 @@ $("stop").addEventListener("click",()=>{$("follow").checked=false;pending="";});
 chrome.storage.local.get(["depth","skill"]).then(v=>{for(const k of ["depth","skill"])if(Number.isInteger(v[k])&&v[k]>=Number($(k).min)&&v[k]<=Number($(k).max))$(k).value=v[k];});
 for(const k of ["depth","skill"])$(k).addEventListener("change",()=>{const n=Number($(k).value);if(Number.isInteger(n)&&n>=Number($(k).min)&&n<=Number($(k).max))chrome.storage.local.set({[k]:n});});
 poll();setInterval(poll,1200);
+
+$("panel").onclick=()=>{
+ if(!chrome.sidePanel?.open){$("site").textContent="Side panel unavailable in this browser version";return;}
+ chrome.sidePanel.open({windowId:chrome.windows.WINDOW_ID_CURRENT}).catch(()=>{$("site").textContent="Could not open side panel. Use the browser side panel menu.";});
+};
