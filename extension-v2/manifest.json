@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChessAI v2",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Standalone chess practice analysis",
   "action": {
     "default_popup": "popup.html"
@@ -9,9 +9,13 @@
   "permissions": [
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "sidePanel"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
   }
 }
