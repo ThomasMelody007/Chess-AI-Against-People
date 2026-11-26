@@ -13,3 +13,6 @@ v2.0 engine confirmed by user in Edge. v2.1 adds explicit opt-in FEN following o
 
 ## v2.1.1
 Adds browser side panel access and collapses advanced settings by default. Share Game FEN import was confirmed in Edge in v2.1.0. The side panel and its active-tab permission behavior still require testing. Import still requires a visible FEN field; automatic extraction without Share Game is not implemented. Move output remains UCI notation.
+
+## v2.1.2
+Follow mode defaults on and clears results when the visible FEN disappears or changes. Untick to use manual FEN. This is a stale-result safeguard, not continuous board extraction: Share Game is still required. Browser runtime testing pending.
