@@ -2,6 +2,33 @@
 
 Historical entries reconstructed from commit history, historical project files, documentation and reported user testing. Dates are UTC commit dates, not independently verified publication dates. Implemented fixes are not necessarily regression-tested. Missing historical details are not invented.
 
+## 2.4.1 — Analysis refinements and bug fixes — 2026-11-27
+
+### Added
+- Built-in catalogue of 25 common opening move prefixes; longest matching prefix shown.
+- Captured pieces from recorded moves, positioned according to board orientation.
+- Color-coded review classifications and cancel review button.
+- Heuristic Great rating: engine-preferred move, same-depth runner-up gap of at least 150 centipawns and loss no greater than 30 centipawns.
+
+### Changed
+- Review uses two principal variations to estimate the best-move gap.
+- Starting review pauses AI gameplay.
+- Manual analysis uses full engine strength independently of AI playing skill.
+- Recommendation scores explicitly use White's perspective.
+
+### Fixed
+- Reversed board square colors (a8 light, a1 dark).
+- Stale status after checkmate/draw and position changes.
+- Dragging enabled on historical positions despite read-only navigation.
+- Bound-only engine scores excluded from live recommendations.
+
+### Known issues and testing status
+- Browser testing pending; changes are implemented but not runtime-verified.
+- Opening catalogue is limited to exact move prefixes, not comprehensive ECO or transposition recognition.
+- Captures before a loaded custom FEN cannot be reconstructed.
+- Great classification is heuristic; Brilliant and calibrated Elo remain deferred.
+- Review can take longer with two principal variations.
+
 ## 2.4.0 — Advanced analysis and training — 2026-11-26
 
 ### Added
