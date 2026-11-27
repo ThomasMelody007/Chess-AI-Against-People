@@ -28,3 +28,6 @@ Review uses a separate full-strength engine at depth 12 / up to 1 second per pos
 
 ## v2.4.1
 Adds a small built-in opening prefix catalogue, recorded captures, colored ratings, cancel review, and heuristic Great rating (best move, same-depth runner-up gap at least 150 cp, loss at most 30 cp). Corrects board parity and White-perspective scores. Manual analysis uses full strength; AI skill remains adjustable. Brilliant and calibrated Elo deferred. Browser testing pending.
+
+## v2.5.0
+Six board themes, two font-based piece styles, optional synthesized move/capture sounds, local single-game autosave and restore, PGN text import and file export, persistent preferences, review counts and clickable graph. Arrow keys navigate history. Restored games start in manual mode. Local storage belongs to the extension origin; removing/reinstalling can erase it, so export PGN before upgrading. Browser testing pending. Custom SVG artwork, clocks, multi-game library and calibrated ratings remain planned.
