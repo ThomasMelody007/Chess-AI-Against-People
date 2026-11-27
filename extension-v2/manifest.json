@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChessAI v2",
-  "version": "2.4.1",
+  "version": "2.5.0",
   "description": "Standalone chess practice analysis",
   "action": {
     "default_popup": "popup.html"
