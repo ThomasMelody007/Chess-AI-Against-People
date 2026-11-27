@@ -2,6 +2,38 @@
 
 Historical entries reconstructed from commit history, historical project files, documentation and reported user testing. Dates are UTC commit dates, not independently verified publication dates. Implemented fixes are not necessarily regression-tested. Missing historical details are not invented.
 
+## 2.5.0 — Appearance, persistence and review usability — 2026-11-27
+
+### Added
+- Six selectable board themes: classic green, ocean blue, wood, monochrome, purple and dark.
+- Classic and outline font-based piece styles.
+- Optional synthesized move and capture sounds.
+- Automatic local single-game saving and restore, with manual resume control.
+- Persistent appearance, orientation, engine and analysis preferences.
+- PGN text import and downloadable PGN export.
+- Review classification totals, clickable evaluation graph and keyboard history navigation.
+
+### Changed
+- Dark interface styling, sticky board on wide screens, compact scrollable review list.
+- Standard full-move numbering in review entries.
+- Great rating excludes single-legal-move positions and extreme evaluations.
+- Restored games start in manual mode to prevent unintended AI moves.
+
+### Fixed
+- PGN result for board-detected checkmate and draws.
+- Specific draw reason in game-over banner.
+- Final draw evaluation displays 0.00.
+- Captured piece colors distinguished.
+- Empty engine results no longer reserve unnecessary space.
+
+### Known issues and testing status
+- Browser testing pending.
+- Storage is local to the extension origin; uninstalling or changing extension ID can lose saved data. Export PGN before upgrades.
+- One saved game only; no multi-game library.
+- Piece styles are font-based; custom artwork, clocks, calibrated Elo and Brilliant classification remain planned.
+- Imported resignation/agreement results are not preserved by board-derived result logic; review score variability remains.
+- Sounds may depend on browser audio activation.
+
 ## 2.4.1 — Analysis refinements and bug fixes — 2026-11-27
 
 ### Added
@@ -23,7 +55,7 @@ Historical entries reconstructed from commit history, historical project files, 
 - Bound-only engine scores excluded from live recommendations.
 
 ### Known issues and testing status
-- Browser testing pending; changes are implemented but not runtime-verified.
+- User screenshots and complete 97-ply AI vs AI review confirmed opening recognition, board colors, captured pieces, draw detection, game review, accuracy display, graph and Great classifications. Review navigation and cancellation not independently confirmed. Reported PGN result, capture colors, blank terminal evaluation and long review list addressed in v2.5.0.
 - Opening catalogue is limited to exact move prefixes, not comprehensive ECO or transposition recognition.
 - Captures before a loaded custom FEN cannot be reconstructed.
 - Great classification is heuristic; Brilliant and calibrated Elo remain deferred.
