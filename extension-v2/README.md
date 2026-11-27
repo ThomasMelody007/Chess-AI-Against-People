@@ -25,3 +25,6 @@ Local practice UI: best move arrow, White-perspective evaluation, drag/drop, SAN
 
 ## v2.4.0
 Review uses a separate full-strength engine at depth 12 / up to 1 second per position. Centipawn loss compares consecutive White-perspective scores from the mover's perspective; estimated accuracy averages 100*exp(-loss/200). Ratings are heuristic, not Chess.com ratings. History navigation is read-only until returning to latest. Material balance and difficulty presets added; Elo calibration and opening recognition deferred. Browser testing pending.
+
+## v2.4.1
+Adds a small built-in opening prefix catalogue, recorded captures, colored ratings, cancel review, and heuristic Great rating (best move, same-depth runner-up gap at least 150 cp, loss at most 30 cp). Corrects board parity and White-perspective scores. Manual analysis uses full strength; AI skill remains adjustable. Brilliant and calibrated Elo deferred. Browser testing pending.
